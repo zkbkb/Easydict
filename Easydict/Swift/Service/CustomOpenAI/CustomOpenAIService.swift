@@ -39,6 +39,11 @@ class CustomOpenAIService: BaseOpenAIService {
         !uuid.isEmpty
     }
 
+    /// Builds the configuration UI for this Custom OpenAI service.
+    /// 
+    /// The returned view includes a section for setting a custom service name and a toggle to enable or disable streaming.
+    — 
+    /// - Returns: A view (`Any`) representing the configuration UI with a custom-name section and a streaming toggle.
     override func configurationListItems() -> Any {
         StreamConfigurationView(
             service: self,

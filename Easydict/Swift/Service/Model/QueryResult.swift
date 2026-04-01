@@ -270,7 +270,8 @@ public class QueryResult: NSObject {
         ["service"]
     }
 
-    /// Resets the result to its initial state.
+    /// Reset all QueryResult state to defaults.
+    /// Clears result data, errors, validationMessage, HTML content, cached copied text, prompt information, speech URLs, UI/loading flags, and any stored raw payload; stops any active audio playback, releases the associated service, and resets the web view manager.
     func reset() {
         queryModel = QueryModel()
         translatedResults = nil

@@ -39,6 +39,14 @@ extension StreamService {
         }
     }
 
+    /// Update the shared query result with the latest streamed text, finalize state when the stream completes, and invoke the provided completion with the resulting `QueryResult`.
+    /// 
+    /// When the stream is already marked finished this function cancels the stream and determines a `QueryError` to report (suppresses user cancellations and may classify or ignore other completion errors based on content). Otherwise it updates `result.isStreamFinished` when an `error` is present, trims and optionally filters `resultText`, assigns the finalized text to `result.translatedResults`, adjusts dictionary-specific UI flags, and completes via the `completion` closure. The result's `.error` property is set with `.queryError(from:)` before invoking `completion`.
+    /// - Parameters:
+    ///   - resultText: The latest streamed text chunk (may be partial or nil); will be trimmed and filtered according to settings before being stored.
+    ///   - queryType: The query presentation type; `.dictionary` toggles dictionary-specific layout flags when finalizing results.
+    ///   - error: An optional error indicating stream completion; a non-nil value marks the stream finished. User-cancellation errors are suppressed and some completion errors may be ignored or reclassified.
+    ///   - completion: Callback invoked with the updated `QueryResult`.
     func updateResultText(
         _ resultText: String?,
         queryType: EZQueryTextType,
@@ -111,6 +119,11 @@ extension StreamService {
         }
     }
 
+    /// Determines whether a completion error can be ignored when the streamed result already contains sufficient content and the error indicates a content-type mismatch.
+    /// - Parameters:
+    ///   - error: The error to inspect for content-type mismatch context (may contain nested/underlying error information).
+    ///   - resultText: The accumulated result text used to assess content sufficiency.
+    /// - Returns: `true` if `resultText` contains at least 8 characters and the error context shows a content-type mismatch for a known MIME (`text/plain` or `application/json`); `false` otherwise.
     private func shouldIgnoreCompletionError(_ error: Error, resultText: String?) -> Bool {
         guard let resultText else {
             return false
@@ -150,7 +163,8 @@ extension StreamService {
         return shouldSuppress
     }
 
-    /// Build a user-friendly QueryError by classifying the Content-Type of the response.
+    /// Maps an `Error` to a user-facing `QueryError`, producing content-type-specific messages when the error context indicates a content-type mismatch.
+    /// - Returns: A `QueryError` representing the classified error. If the error context indicates a content-type mismatch, returns a `.contentTypeMismatch` `QueryError` with localized messages tailored for `text/html`, `application/json`, or an unknown content type. Otherwise returns `.queryError(from: error)` if available, or a `QueryError(type: .api)` fallback.
     private func classifiedQueryError(from error: Error) -> QueryError {
         let context = errorContextString(error).lowercased()
 
@@ -180,13 +194,23 @@ extension StreamService {
         .queryError(from: error) ?? QueryError(type: .api)
     }
 
-    /// Shared check for Content-Type mismatch patterns across error detection paths.
+    /// Determines whether the provided error context string indicates an HTTP content-type mismatch.
+    /// - Parameter context: A normalized (typically lowercased) error context string to inspect.
+    /// - Returns: `true` if the context contains indicators of a content-type mismatch, `false` otherwise.
     private func isContentTypeMismatchContext(_ context: String) -> Bool {
         context.contains("incorrectcontenttype(")
             || context.contains("incorrect content-type:")
             || context.contains("unacceptable content-type:")
     }
 
+    /// Builds a compact, de-duplicated string containing human-readable context extracted from an `Error`.
+    /// 
+    /// The returned string aggregates the error's `description`, `localizedDescription`, `localizedFailureReason`,
+    /// `localizedRecoverySuggestion`, any debug description found in `userInfo[NSDebugDescriptionErrorKey]`, and
+    /// response body text stored under `com.alamofire.serialization.response.error.data` (if UTF-8 decodable). It
+    /// also traverses an underlying error chain up to two levels to include context from wrapped errors.
+    /// - Parameter error: The error to extract context from.
+    /// - Returns: A single string with distinct context fragments joined by " | ".
     private func errorContextString(_ error: Error) -> String {
         var parts = Set<String>()
 

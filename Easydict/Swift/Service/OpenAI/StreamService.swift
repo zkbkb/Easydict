@@ -37,12 +37,15 @@ public class StreamService: QueryService {
     /// Cancels the current streaming request manually.
     open override func cancelStream() {}
 
-    // MARK: Public
+    /// Indicates whether the service should use streaming responses.
+    /// - Returns: `true` if streaming is enabled, `false` otherwise.
 
     public override func isStream() -> Bool {
         enableStreaming
     }
 
+    /// Determines the recommended query text type for this service.
+    /// - Returns: The recommended `EZQueryTextType` for the current service.
     public override func intelligentQueryTextType() -> EZQueryTextType {
         MyConfiguration.shared.intelligentQueryTextTypeForServiceType(serviceType())
     }
@@ -342,6 +345,9 @@ public class StreamService: QueryService {
         set { Defaults[enableStreamingKey] = newValue }
     }
 
+    /// Parses a comma-separated string of model names into an array of cleaned model identifiers.
+    /// - Parameter supportedModels: A comma-separated list of model names.
+    /// - Returns: An array of model names with surrounding whitespace removed; empty entries are omitted.
     func validModels(from supportedModels: String) -> [String] {
         supportedModels.components(separatedBy: ",")
             .map { $0.trim() }.filter { !$0.isEmpty }

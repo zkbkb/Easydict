@@ -97,6 +97,12 @@ struct ServiceConfigurationSecretSectionView<Content: View>: View {
         }
     }
 
+    /// Starts asynchronous validation of the associated service and updates the view model with the result.
+    /// 
+    /// On completion it sets `viewModel.isAlertPresented = true`, updates `viewModel.alertTitle` to either
+    /// `"service.configuration.validation_success"` or `"service.configuration.validation_fail"`, and sets
+    /// `viewModel.errorMessage` to a validation or error message. It also clears the validating state and logs
+    /// a localized alert title prefixed with the service type.
     func validate() {
         viewModel.isValidating.toggle()
 

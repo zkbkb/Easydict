@@ -15,7 +15,9 @@ import OpenAI
 @objcMembers
 @objc(EZBaseOpenAIService)
 public class BaseOpenAIService: StreamService {
-    // MARK: Open
+    /// Cancels any active translation stream and stops a pending non-streaming request.
+    /// 
+    /// Cancels the internal streaming control and, if a non-streaming Task is in flight, cancels it and clears the stored reference.
 
     open override func cancelStream() {
         control.cancel()
@@ -35,6 +37,18 @@ public class BaseOpenAIService: StreamService {
     /// Reference to the in-flight non-streaming task so `cancelStream()` can cancel it.
     private var nonStreamingTask: Task<Void, Never>?
 
+    /// Creates a stream that yields translated content for the given text from a source language to a target language.
+    /// 
+    /// The method validates the configured endpoint and (when required) the API key, builds a chat query from the provided text and language pair, and then either:
+    /// - uses the service's streaming API to produce incremental content chunks, or
+    /// - performs a single-shot non-streaming request that yields the full translated content as a single chunk.
+    /// The choice between streaming and non-streaming is governed by `streamingOverride ?? enableStreaming`.
+    /// - Parameters:
+    ///   - text: The text to translate.
+    ///   - from: Source language.
+    ///   - to: Target language.
+    /// - Returns: An AsyncThrowingStream that yields translated content chunks as `String`; the stream completes when translation finishes.
+    /// - Throws: `QueryError` when the endpoint is invalid (`.parameter`), the API key is missing when required (`.missingSecretKey`), chat message conversion fails (`.parameter`), or when remote request/response errors occur (e.g., `.api`, `.noResult`).
     override func contentStreamTranslate(
         _ text: String,
         from: Language,
@@ -103,7 +117,10 @@ public class BaseOpenAIService: StreamService {
     }
 
     /// Validates the service, automatically falling back to non-streaming if the endpoint
-    /// returns an incorrect Content-Type (e.g. `application/json` instead of `text/event-stream`).
+    /// Validates the service configuration, retrying without streaming if validation fails due to a content-type mismatch.
+    /// 
+    /// If the initial validation fails with a `QueryError` of type `.contentTypeMismatch` while streaming is enabled, this method retries validation with streaming temporarily disabled. If the retry succeeds, streaming is persisted as disabled and the returned result contains a localized success message indicating streaming was disabled.
+    /// - Returns: A `QueryResult` describing the final validation outcome. If the non-streaming retry succeeds, the returned result reflects the retry; otherwise the original validation result is returned.
     override func validate() async -> QueryResult {
         let result = await super.validate()
 
@@ -135,6 +152,11 @@ public class BaseOpenAIService: StreamService {
         return retryResult
     }
 
+    /// Converts the chat query's message dictionaries into `OpenAIChatMessage` model instances.
+    /// 
+    /// Only messages that can be mapped to a valid `OpenAIChatMessage.Role` and constructed as `OpenAIChatMessage` are included; invalid or unconvertible messages are skipped.
+    /// - Parameter chatQuery: The chat query parameters whose message dictionaries will be converted.
+    /// - Returns: An array containing the successfully constructed `OpenAIChatMessage` objects (typed as `[Any]`).
     override func serviceChatMessageModels(_ chatQuery: ChatQueryParam) -> [Any] {
         var chatMessages: [OpenAIChatMessage] = []
         for message in chatMessageDicts(chatQuery) {
@@ -151,7 +173,13 @@ public class BaseOpenAIService: StreamService {
 
     // MARK: Private
 
-    /// Perform a non-streaming chat completion, yielding the full response as a single chunk.
+    /// Performs a single-shot (non-streaming) chat completion request and exposes the full response content as a single-streamed value.
+    /// 
+    /// The function issues an HTTP POST with a JSON-encoded `ChatQuery` (sent with `stream = false`). If `apiKey` is non-empty the request includes an `Authorization: Bearer <apiKey>` header. On a successful 2xx response the body is decoded as `ChatResult` and the first non-empty `choices.first?.message.content?.string` is yielded as a single stream element; if no content is present a `QueryError(type: .noResult)` is thrown. For non-2xx responses the implementation first attempts to decode `APIErrorResponse` and throws it if successful, otherwise it throws a `QueryError(type: .api, ...)` that includes the HTTP status and response body text. The returned stream is cancelled cleanly if the underlying task is cancelled or the stream terminates; the running `Task` is stored in `nonStreamingTask` so it can be cancelled by `cancelStream()`.
+    /// - Parameters:
+    ///   - query: The chat query to send (will be sent with `stream = false`).
+    ///   - url: The request endpoint URL.
+    /// - Returns: An `AsyncThrowingStream<String, Error>` that yields the complete response content as a single `String` or finishes by throwing an error.
     private func nonStreamingTranslate(
         query: ChatQuery,
         url: URL
