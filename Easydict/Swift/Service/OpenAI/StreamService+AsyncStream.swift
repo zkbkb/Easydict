@@ -52,6 +52,11 @@ extension StreamService {
                     updateResultText(resultText, queryType: queryType, error: nil) { result in
                         continuation.yield(result)
                     }
+                } catch is CancellationError {
+                    // User cancelled — silently finish without surfacing a ".noResult" error.
+                    result.isStreamFinished = true
+                    continuation.finish()
+                    return
                 } catch {
                     // Handle the error and notify the user
                     result.isStreamFinished = true
