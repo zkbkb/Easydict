@@ -24,6 +24,8 @@ class CustomOpenAIService: BaseOpenAIService {
 
     // MARK: Internal
 
+    override var supportsStreamingToggle: Bool { true }
+
     override func serviceTypeWithUniqueIdentifier() -> String {
         guard !uuid.isEmpty else {
             return ServiceType.customOpenAI.rawValue
