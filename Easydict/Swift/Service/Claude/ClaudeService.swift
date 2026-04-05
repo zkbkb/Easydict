@@ -265,27 +265,38 @@ public final class ClaudeService: StreamService {
         try processCompleteEvents(from: &textBuffer, continuation: continuation)
     }
 
-    /// Splits the text buffer on double-newlines and processes complete SSE events.
-    /// Normalizes CRLF to LF before splitting to handle proxies that use CRLF framing.
+    /// Splits the text buffer on SSE event boundaries and processes complete events.
     private func processCompleteEvents(
         from textBuffer: inout String,
         continuation: AsyncThrowingStream<String, Error>.Continuation
     ) throws {
-        // Normalize CRLF to LF so the "\n\n" separator works for all line endings.
-        textBuffer = textBuffer.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
+        let completeEvents = splitCompleteEvents(from: &textBuffer)
 
-        let eventSeparator = "\n\n"
-        guard textBuffer.contains(eventSeparator) else { return }
-
-        let parts = textBuffer.split(separator: eventSeparator, omittingEmptySubsequences: false)
-        textBuffer = String(parts.last ?? "")
-
-        for event in parts.dropLast() where !event.isEmpty {
+        for event in completeEvents {
             if let content = try parseSSEEvent(String(event)) {
                 continuation.yield(content)
             }
         }
+    }
+
+    /// Splits buffered SSE text into complete events while retaining trailing partial data.
+    ///
+    /// This method normalizes CRLF and CR to LF so both `\n\n` and `\r\n\r\n` event
+    /// separators are parsed consistently.
+    ///
+    /// - Parameter textBuffer: Buffered SSE text; updated in place to keep incomplete data.
+    /// - Returns: Complete SSE event blocks that are ready for parsing.
+    func splitCompleteEvents(from textBuffer: inout String) -> [String] {
+        // Normalize CRLF/CR so a single separator strategy is sufficient.
+        textBuffer = textBuffer.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        let eventSeparator = "\n\n"
+        guard textBuffer.contains(eventSeparator) else { return [] }
+
+        let parts = textBuffer.split(separator: eventSeparator, omittingEmptySubsequences: false)
+        textBuffer = String(parts.last ?? "")
+        return parts.dropLast().map(String.init).filter { !$0.isEmpty }
     }
 
     /// Parses a single SSE event and extracts delta text content.
@@ -295,7 +306,7 @@ public final class ClaudeService: StreamService {
     /// event: content_block_delta
     /// data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}
     /// ```
-    private func parseSSEEvent(_ event: String) throws -> String? {
+    func parseSSEEvent(_ event: String) throws -> String? {
         let eventPrefix = "event:"
         let dataPrefix = "data:"
 
