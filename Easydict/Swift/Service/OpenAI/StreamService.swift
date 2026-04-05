@@ -6,6 +6,7 @@
 //  Copyright © 2024 izual. All rights reserved.
 //
 
+import AsyncAlgorithms
 import Combine
 import Defaults
 import Foundation
@@ -115,7 +116,6 @@ public class StreamService: QueryService {
     )
         -> AsyncThrowingStream<QueryResult, Error> {
         let queryResultStream = streamTranslate(text: text, from: from, to: to)
-        let textStream = queryResultStreamToTextStream(queryResultStream)
 
         return AsyncThrowingStream { [weak self] continuation in
             Task {
@@ -127,11 +127,7 @@ public class StreamService: QueryService {
                 var didYieldError = false
 
                 do {
-                    try await self.throttleUpdateResultText(
-                        textStream,
-                        queryType: self.supportedQueryType(),
-                        error: nil
-                    ) { result in
+                    for try await result in queryResultStream._throttle(for: .seconds(0.3)) {
                         if result.error != nil {
                             didYieldError = true
                         }

@@ -133,11 +133,6 @@ extension StreamService {
                         }
                         if let translatedText = queryResult.translatedText {
                             continuation.yield(translatedText)
-                        } else if queryResult.isStreamFinished {
-                            // Ensure downstream consumers receive a terminal update even when
-                            // cancellation happens before the first token is produced.
-                            // Use a non-empty sentinel to avoid `.noResult` synthesis.
-                            continuation.yield(" ")
                         }
                     }
                     continuation.finish()
