@@ -281,15 +281,24 @@ public final class ClaudeService: StreamService {
 
     /// Splits buffered SSE text into complete events while retaining trailing partial data.
     ///
-    /// This method normalizes CRLF and CR to LF so both `\n\n` and `\r\n\r\n` event
-    /// separators are parsed consistently.
+    /// This method normalizes complete CRLF and CR line endings to LF so both `\n\n`
+    /// and `\r\n\r\n` event separators are parsed consistently, while preserving a
+    /// trailing `\r` until the next chunk arrives so a split `\r\n` is not turned into
+    /// a false `\n\n` event boundary.
     ///
     /// - Parameter textBuffer: Buffered SSE text; updated in place to keep incomplete data.
     /// - Returns: Complete SSE event blocks that are ready for parsing.
     func splitCompleteEvents(from textBuffer: inout String) -> [String] {
-        // Normalize CRLF/CR so a single separator strategy is sufficient.
-        textBuffer = textBuffer.replacingOccurrences(of: "\r\n", with: "\n")
+        // Preserve a trailing \r: it may be the first half of a \r\n pair split across chunks.
+        let hasTrailingCR = textBuffer.hasSuffix("\r")
+        let bufferToNormalize = hasTrailingCR ? String(textBuffer.dropLast()) : textBuffer
+
+        // Normalize only complete line endings; the deferred trailing \r will pair with
+        // a leading \n from the next chunk.
+        let normalized = bufferToNormalize
+            .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+        textBuffer = hasTrailingCR ? normalized + "\r" : normalized
 
         let eventSeparator = "\n\n"
         guard textBuffer.contains(eventSeparator) else { return [] }
