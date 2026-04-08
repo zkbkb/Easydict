@@ -162,3 +162,34 @@ See [SKILL.md](.agents/skills/git-commit/SKILL.md) for Angular-style commit mess
 ## MCP Servers
 
 Always use the OpenAI developer documentation MCP server if you need to work with the OpenAI API, ChatGPT Apps SDK, Codex,… without me having to explicitly ask.
+
+## Cursor Cloud specific instructions
+
+### Environment constraints
+
+Easydict is a macOS-native app. The Cloud Agent VM runs Linux, so `xcodebuild` (build, test, run) is unavailable. The following tooling **is** available and should be used for validation:
+
+| Tool | Version | Use |
+|---|---|---|
+| `swiftlint` | 0.63.2 | Lint all Swift files: `swiftlint lint` |
+| `swiftformat` | 0.59.1 | Check formatting: `swiftformat --lint Easydict/` |
+| `swiftc -parse <file>` | Swift 6.1 | Verify syntax of individual `.swift` files |
+| `pod install` | CocoaPods 1.16.2 | Regenerate Pods project after `Podfile` changes |
+
+### What you can validate
+
+- **Lint**: `swiftlint lint` (uses `.swiftlint.yml`), `swiftformat --lint Easydict/` (uses `.swiftformat`). Both must report zero violations before committing.
+- **Syntax**: `swiftc -parse <file.swift>` checks that a file parses as valid Swift. Use this after creating or heavily editing a file. Note: this only checks syntax, not type-checking (imports and cross-file references will not resolve).
+- **CocoaPods**: `pod install` works on Linux and regenerates the `Pods/` project. The `Pods/` directory is committed; run `pod install` only after `Podfile` changes.
+
+### What you cannot validate
+
+- Full compilation (`xcodebuild build`) requires Xcode on macOS.
+- Unit/integration tests (`xcodebuild test`) require Xcode on macOS.
+- Running the app requires macOS 13.0+.
+- SPM dependency resolution for the main project happens inside Xcode, not standalone `swift package resolve` (the project uses an `.xcworkspace`, not a `Package.swift` at root).
+
+### Linting gotchas
+
+- SwiftLint on Linux uses the statically linked binary without SourceKit, so some rules that depend on SourceKit may be silently skipped. This does not affect the majority of rules.
+- SwiftFormat is built from the `BuildTools/Package.swift` SPM package (pinned at 0.59.1). If the version changes, rebuild: `cd BuildTools && swift build -c release --product swiftformat && sudo cp .build/release/swiftformat /usr/local/bin/`.
